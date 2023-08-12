@@ -16,5 +16,8 @@
     "type": "git",
     "url": "git@github.com:miko-soft/httpclient-node.git"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "publishConfig": {
+    "access": "public"
+  }
 }
