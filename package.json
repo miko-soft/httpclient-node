@@ -1,0 +1,20 @@
+{
+  "name": "@mikosoft/httpclient-node",
+  "version": "1.0.0",
+  "title": "HTTP Client - NodeJS",
+  "description": "Simple but powerful HTTP client for NodeJS.",
+  "keywords": [
+    "http client",
+    "node",
+    "nodejs",
+    "json"
+  ],
+  "author": "Mikosoft",
+  "license": "MIT",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:miko-soft/httpclient-node.git"
+  },
+  "dependencies": {}
+}
