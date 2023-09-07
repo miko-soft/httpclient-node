@@ -13,9 +13,8 @@ class HttpClient {
 
   /**
    * @param {object} opts - HTTP Client options {encodeURI, timeout, retry, retryDelay, maxRedirects, headers, decompress}
-   * @param {object} proxyAgent - proxy agent (https://www.npmjs.com/package/https-proxy-agent)
    */
-  constructor(opts, proxyAgent) {
+  constructor(opts) {
     this.url;
     this.protocol;
     this.hostname;
@@ -65,9 +64,6 @@ class HttpClient {
 
     // default request headers
     this.headers = this.opts.headers;
-
-    // proxy agent
-    this.proxyAgent = proxyAgent;
   }
 
 
@@ -690,6 +686,15 @@ class HttpClient {
 
 
   /********** MISC *********/
+  /**
+   * Inject the proxy agent
+   * @param {object} proxyAgent - proxy agent (https://www.npmjs.com/package/https-proxy-agent)
+   */
+  injectProxyAgent(proxyAgent) {
+    this.proxyAgent = proxyAgent;
+  }
+
+
   /**
    * Print the object to the console.
    * @param {object} obj

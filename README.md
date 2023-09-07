@@ -363,6 +363,11 @@ headerNames - array of header names ['content-type', 'accept']
 #### getHeaders()
 Get the current request headers.
 
+#### injectProxyAgent(proxyAgent)
+Inject the proxy agent. The [https-proxy-agent](https://www.npmjs.com/package/https-proxy-agent) can be used.
+
+#### print(obj)
+Print the object in the console. Use it to debug the answer.
 
 
 ## AddOns
