@@ -549,10 +549,11 @@ class HttpClient {
 
     // convert string to object if the content has valid JSON format
     try {
-      const contentObj = JSON.parse(answer.res.content);
-      if (!!contentObj) { answer.res.content = contentObj; }
+      if (answer.res.content) {
+        answer.res.content = JSON.parse(answer.res.content);
+      }
     } catch (err) {
-      console.log(`The answer has invalid JSON: ${answer.res.content}`);
+      console.log(`The answer's res.content has invalid JSON: ${answer.res.content}`);
     }
 
     return answer;
