@@ -299,8 +299,8 @@ class HttpClient {
       // remoteAddress: // TODO
       // referrerPolicy: // TODO
       req: {
-        query: {},
         headers: this.headers,
+        query: {},
         payload: undefined,
         requestOpts: undefined
       },
