@@ -36,9 +36,9 @@ const getUrl = async () => {
       encodeURI: false,
       encoding: 'utf8',
       timeout: 3000,
-      retry: 2,
-      retryDelay: 2100,
-      maxRedirects: 3,
+      retry: 2, // used only in ask() method
+      retryDelay: 2100, // used only in ask() method
+      maxRedirects: 3, // used only in ask() method
       headers: {
         'authorization': '',
         'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36',
@@ -72,9 +72,9 @@ Other examples are in /tests/ folder.
 #### constructor(opts:{encodeURI:boolean, timeout:number, retry:number, retryDelay:number, maxRedirects:number, headers:object})
 - **encodeURI**	Encode URI before request is sent.	(false)
 - **timeout**	Close socket on certain period of time in milliseconds. Same as timeout in NodeJS HTTP library.	(8000)
-- **retry**	When HTTP Client receives an error response it will try to send requests repeatedly. The retry number determines the max allowed retries.	(3)
-- **retryDelay**	Time delay after each retry in milliseconds.	(5500)
-- **maxRedirects**	When HTTP Client receives 301 in Header response it will try to send new request to redirected URL. Number maxRedirects determines max redirects allowed to prevent infinite loops.	(3)
+- **retry**	When HTTP Client receives an error response it will try to send requests repeatedly. The retry number determines the max allowed retries. Used only in *ask()* method.	(3)
+- **retryDelay**	Time delay after each retry in milliseconds. Used only in *ask()* method.	(5500)
+- **maxRedirects**	When HTTP Client receives 301 in Header response it will try to send new request to redirected URL. Number maxRedirects determines max redirects allowed to prevent infinite loops. Used only in *ask()* method.	(3)
 - **headers**	Definition of HTTP Headers used in HTTP request.	(see below)
 
 ```js

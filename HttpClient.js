@@ -30,9 +30,9 @@ class HttpClient {
         encodeURI: false,
         encoding: 'utf8', // use 'binary' for PDF files, and revert it to buffer with Buffer.from(answer.res.content, 'binary')
         timeout: 8000,
-        retry: 3,
-        retryDelay: 5500,
-        maxRedirects: 3,
+        retry: 3, // used only in ask() method
+        retryDelay: 5500, // used only in ask() method
+        maxRedirects: 3, // used only in ask() method
         headers: {
           'user-agent': `MikoSoft HttpClient-Node/${pkg_json.version}`, // 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36'
           'accept': '*/*', // 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
@@ -85,7 +85,7 @@ class HttpClient {
     this.pathname = urlObj.pathname;
     this.queryString = urlObj.search;
     this.queryObject = urlObj.searchParams;
-    this.isHttps = /^https/.test(this.protocol);
+    this.isHttps = /^https/.test(url);
 
     // debug
     if (this.opts.debug) {
@@ -195,19 +195,20 @@ class HttpClient {
    * @param {Object} opts
    */
   _hireAgent(opts) {
-    // default agent options https://nodejs.org/api/http.html#http_new_agent_options
-    const options = {
-      timeout: opts.timeout, // close socket on certain period of time
-      keepAlive: false, // keep socket open so it can be used for future requests without having to reestablish new TCP connection (false)
-      keepAliveMsecs: 1000, // initial delay to receive packets when keepAlive:true (1000)
-      maxSockets: Infinity, // max allowed sockets (Infinity)
-      maxFreeSockets: 256, // max allowed sockets to leave open in a free state when keepAlive:true (256)
-    };
-
     let agent;
-    if (!!this.proxyAgent) { agent = this.proxyAgent; }
-    else { agent = this.isHttps ? new https.Agent(options) : new http.Agent(options); }
-
+    if (!!this.proxyAgent) {
+      agent = this.proxyAgent;
+    } else {
+      // default agent options https://nodejs.org/api/http.html#http_new_agent_options
+      const options = {
+        timeout: opts.timeout, // close socket on certain period of time
+        keepAlive: false, // keep socket open so it can be used for future requests without having to reestablish new TCP connection (false)
+        keepAliveMsecs: 1000, // initial delay to receive packets when keepAlive:true (1000)
+        maxSockets: Infinity, // max allowed sockets (Infinity)
+        maxFreeSockets: 256, // max allowed sockets to leave open in a free state when keepAlive:true (256)
+      };
+      agent = this.isHttps ? new https.Agent(options) : new http.Agent(options);
+    }
     return agent;
   }
 
@@ -335,6 +336,7 @@ class HttpClient {
     const agent = this._hireAgent(this.opts);
     const requestOpts = {
       agent,
+      protocol: this.protocol,
       hostname: this.hostname,
       port: this.port ? this.port : this.isHttps ? 443 : 80,
       host: this.host,
