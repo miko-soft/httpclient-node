@@ -1,7 +1,7 @@
 /**
  * Pure proxy server with streams.
  * BROWSER --> PROXY --> ORIGHOST
- * $ node 80proxy.js
+ * $ node 80proxyServer.js
  * Then open in the browser: http://localhost:1111
  */
 const http = require('http');

@@ -1,0 +1,16 @@
+{
+  "name": "tests",
+  "version": "1.0.0",
+  "description": "",
+  "main": "01parseUrl.js",
+  "scripts": {
+    "inst": "rm -f node_modules && rm package-lock.json && npm install"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "http-proxy-agent": "^7.0.2",
+    "https-proxy-agent": "^7.0.5",
+    "socks-proxy-agent": "^8.0.4"
+  }
+}
