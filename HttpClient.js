@@ -347,13 +347,13 @@ class HttpClient {
 
     let clientRequest;
     if (/GET/i.test(method)) {  // GET  - no body
-      this.delHeaders(['content-length']);
+      if (requestOpts.headers && requestOpts.headers['content-length']) { delete requestOpts.headers['content-length']; } // remove content-length
       clientRequest = requestLib(requestOpts);
 
     } else { // POST, PUT, DELETE, ... - with body
       const body_str = JSON.stringify(body_obj);
       const contentLength = Buffer.byteLength(body_str, this.opts.encoding);
-      this.setHeader('content-length', contentLength);
+      requestOpts.headers['content-length'] = contentLength; // add content-length
       clientRequest = requestLib(requestOpts);
       clientRequest.write(body_str, this.opts.encoding);
     }
@@ -568,7 +568,7 @@ class HttpClient {
    * Get request and response streams which can be used for piping. For example: clientResponse.pipe(file)
    * @param {string} url - https://www.dex8.com
    * @param {string} method - GET, POST, PUT, DELETE, PATCH
-   * @param {object} body_obj - http body payload (when foer example the POST method is used)
+   * @param {object} body_obj - http body payload (when for example the POST method is used)
    * @returns {Promise<{clientrequest:Stream, clientResponse:Stream}>}
    */
   grabStreams(url, method = 'GET', body_obj) {
@@ -595,13 +595,13 @@ class HttpClient {
 
     let clientRequest;
     if (/GET/i.test(method)) {  // GET  - no body
-      this.delHeaders(['content-length']);
+      if (requestOpts.headers && requestOpts.headers['content-length']) { delete requestOpts.headers['content-length']; } // remove content-length
       clientRequest = requestLib(requestOpts);
 
     } else { // POST, PUT, DELETE, ... - with body
       const body_str = JSON.stringify(body_obj);
       const contentLength = Buffer.byteLength(body_str, this.opts.encoding);
-      this.setHeader('content-length', contentLength);
+      requestOpts.headers['content-length'] = contentLength; // add content-length
       clientRequest = requestLib(requestOpts);
       clientRequest.write(body_str, this.opts.encoding);
     }
