@@ -372,6 +372,8 @@ class HttpClient {
 
 
         const resolveAnswer = () => {
+          clearTimeout(timeoutID);
+
           // concat buffer parts
           let buf = Buffer.concat(buf_chunks);
 
@@ -397,7 +399,6 @@ class HttpClient {
           } else {
             content = buf.toString(this.opts.encoding);
           }
-
 
           // format answer
           const answer = { ...answer_proto }; // clone object to prevent overwrite of object properies once promise is resolved
@@ -426,8 +427,7 @@ class HttpClient {
         clientResponse.on('end', resolveAnswer);
 
         // when server sends HTTP header Connection: 'keep-alive' the res.on('end', ...) is never fired
-        setTimeout(resolveAnswer, this.opts.timeout);
-
+        const timeoutID = setTimeout(resolveAnswer, this.opts.timeout);
       });
 
 
