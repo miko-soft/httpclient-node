@@ -1,6 +1,6 @@
 {
   "name": "@mikosoft/httpclient-node",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "title": "HTTP Client - NodeJS",
   "description": "Simple but powerful HTTP client for NodeJS.",
   "keywords": [
