@@ -340,8 +340,44 @@ JSON answer:
 
 
 #### grabStreams(url, method = 'GET', body)
-Get request and response streams which can be used for piping. For example: clientResponse.pipe(file)
-*hcn.grabStreams('http://www.dex8.com');*
+Get request and response streams which can be used for piping. For example:
+*const = { clientRequest, clientResponse } = hcn.grabStreams('https://www.example.com/song.mp4');*
+*clientResponse.pipe(...);*
+
+```javascript
+// send request to telegram
+  const opts = {
+    encodeURI: false,
+    encoding: 'utf8',
+    timeout: 3000,
+    headers: {
+      'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36',
+      'accept': '*/*',
+      'cache-control': 'no-cache',
+      'accept-encoding': 'gzip',
+      'connection': 'close',
+      'content-type': 'text/html; charset=UTF-8'
+    },
+    debug: false
+  };
+  const hcn = new HttpClient(opts);
+  const { clientRequest, clientResponse } = await hcn.grabStreams(`https://api.telegram.org/file/bot${BOT_TOKEN}/${telegram_file_path}`);
+
+  // save file
+  const filePath = path.join(process.cwd(), './tmp/proc-pdf', username, fileName);
+  await fse.ensureFile(filePath);
+  const writer = fse.createWriteStream(filePath);
+  clientResponse.pipe(writer);
+
+  // writer events
+  writer.on('finish', () => {
+    console.log(`File downloaded successfully: ${fileName}`);
+  });
+
+  writer.on('error', (err) => {
+    console.error(`Error writing file: ${err}`);
+  });
+```
 
 
 #### setHeaders(headerObj)
