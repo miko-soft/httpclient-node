@@ -4,7 +4,7 @@
  * $ node 81proxyServer_grabStreams.js
  * Then open in the browser: http://localhost:2222
  */
-const HttpClient = require('../HttpClient.js');
+const HttpClient = require('../../HttpClient.js');
 const http = require('http');
 
 
@@ -32,8 +32,7 @@ proxyServer.on('request', async (proxyServer_req, proxyServer_res) => {
   headers.host = urlObj.host;
 
   // forward request to original host
-  const opts = {};
-  const hcn = new HttpClient(opts);
+  const hcn = new HttpClient();
 
   // get request & response to origserver as stream objects
   const hcnStreams = await hcn.grabStreams(url).catch(err => {

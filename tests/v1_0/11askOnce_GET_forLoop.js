@@ -2,7 +2,7 @@
  * $ node 11askOnce_GET_forLoop.js
  */
 const util = require('util');
-const HttpClient = require('../HttpClient.js');
+const HttpClient = require('../../HttpClient.js');
 
 
 

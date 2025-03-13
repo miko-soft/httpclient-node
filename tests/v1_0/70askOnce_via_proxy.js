@@ -2,7 +2,7 @@
  * $ node 10askOnce_GET.js <url>
  */
 const util = require('util');
-const HttpClient = require('../HttpClient.js');
+const HttpClient = require('../../HttpClient.js');
 const { HttpProxyAgent } = require('http-proxy-agent'); // for http: proxy protocol
 const { HttpsProxyAgent } = require('https-proxy-agent'); // for https: proxy protocol
 const { SocksProxyAgent } = require('socks-proxy-agent'); // for socks4: or socks5: proxy protocol

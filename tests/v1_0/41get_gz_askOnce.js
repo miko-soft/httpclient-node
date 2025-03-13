@@ -3,7 +3,7 @@
  * Get .gz file.
  */
 const util = require('util');
-const HttpClient = require('../HttpClient.js');
+const HttpClient = require('../../HttpClient.js');
 const url = 'https://common.elisaviihde.fi/sitemaps/events-s1.xml.gz';
 console.log('asked url:: GET', url);
 

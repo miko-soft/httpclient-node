@@ -1,15 +1,15 @@
 /**
- * $ node 40get_gz.js
+ * $ node 40get_gz_grabStreams.js
  * Get .gz file.
  */
 const util = require('util');
 const zlib = require('zlib');
-const HttpClient = require('../HttpClient.js');
+const HttpClient = require('../../HttpClient.js');
 const url = 'https://common.elisaviihde.fi/sitemaps/events-s1.xml.gz';
 console.log('asked url:: GET', url);
 
 
-const getJSON = async () => {
+const getStream = async () => {
   const opts = {
     encodeURI: false,
     encoding: 'utf8',
@@ -17,7 +17,6 @@ const getJSON = async () => {
     retry: 0,
     retryDelay: 5500,
     maxRedirects: 0,
-    // headers,
     decompress: false,
     bufferResponse: false,
     debug: false
@@ -44,7 +43,7 @@ const getJSON = async () => {
 };
 
 
-getJSON().catch(console.error);
+getStream().catch(console.error);
 
 
 

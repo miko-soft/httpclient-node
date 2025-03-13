@@ -4,7 +4,7 @@
  * $ node 12askOnce_file.js https://adsuu.com/pics/classifieds.png
  */
 const util = require('util');
-const HttpClient = require('../HttpClient.js');
+const HttpClient = require('../../HttpClient.js');
 const url = process.argv[2];
 
 console.log('asked url:: GET', url);
