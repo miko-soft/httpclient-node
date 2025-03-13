@@ -9,62 +9,416 @@ const util = require('util');
 const pkg_json = require('./package.json');
 
 
+
 class HttpClient {
 
   /**
-   * @param {object} opts - HTTP Client options {encodeURI, timeout, retry, retryDelay, maxRedirects, headers, decompress}
+   * @param {object} opts - HTTP Client options
+   * @param {object} proxyAgent - proxy agent (https://www.npmjs.com/package/https-proxy-agent)
    */
-  constructor(opts) {
-    this.url;
-    this.protocol;
-    this.hostname;
-    this.port;
-    this.host;
-    this.pathname;
-    this.queryString;
-    this.queryObject = {};
-    this.isHttps;
-
-    if (!opts || (!!opts && !Object.keys(opts).length)) {
-      this.opts = {
-        encodeURI: false,
-        encoding: 'utf8', // use 'binary' for PDF files, and revert it to buffer with Buffer.from(answer.res.content, 'binary')
-        timeout: 8000,
-        retry: 3, // used only in ask() method
-        retryDelay: 5500, // used only in ask() method
-        maxRedirects: 3, // used only in ask() method
-        headers: {
-          'user-agent': `MikoSoft HttpClient-Node/${pkg_json.version}`, // 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36'
-          'accept': '*/*', // 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
-          'cache-control': 'no-cache',
-          'accept-encoding': 'gzip',
-          'connection': 'close', // keep-alive
-          'content-type': 'text/html; charset=UTF-8'
-        },
-        decompress: false, // decompress gzip or deflate
-        bufferResponse: false, // Get answer.res.content as buffer. The buffer content can be used in FormData: const fd = new Formdata(); fd.append('file', answer.res.content)
-        debug: false, // show debug messages
-      };
-    } else {
-      this.opts = opts;
-      this.opts.encoding = this.opts.encoding || 'utf8';
-      this.opts.timeout = this.opts.timeout || 8000;
-      this.opts.retry = this.opts.retry || 3;
-      this.opts.retryDelay = this.opts.retryDelay || 5500;
-      this.opts.maxRedirects = this.opts.maxRedirects || 3;
-      this.opts.headers = this.opts.headers || {
-        'user-agent': `MikoSoft HttpClient-Node/${pkg_json.version}`, // 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36'
-        'accept': '*/*', // 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
-        'cache-control': 'no-cache',
-        'accept-encoding': 'gzip',
-        'connection': 'close', // keep-alive
-        'content-type': 'text/html; charset=UTF-8'
-      };
-    }
+  constructor(opts = {}, proxyAgent) {
+    // options
+    this.opts = {
+      encodeURI: opts.encodeURI || false, // use encodeURI() - remove multiple empty spaces and insert %20
+      encoding: opts.encoding || 'utf8', // default 'utf8'. Use 'binary' for PDF files, and revert it to buffer with Buffer.from(answer.res.content, 'binary')
+      timeout: opts.timeout || 8000, // wait for response in miliseconds (agent tomeiut definition)
+      retry: opts.retry || 3, // how many time to retry on failed response. It's used only in ask() method.
+      retryDelay: opts.retryDelay || 5000, // deley between two consecutive retries.  It's used only in ask() method.
+      maxRedirects: opts.maxRedirects || 3, // how many 3XX redirects to process. It's used only in ask() method.
+      decompress: opts.decompress || false, // to decompress gzip or deflate or not
+      bufferResponse: opts.bufferResponse || false, // Get answer.res.content as buffer. The buffer content can be used in FormData: const fd = new Formdata(); fd.append('file', answer.res.content)
+      debug: opts.debug || false // show logs in the console
+    };
 
     // default request headers
-    this.headers = this.opts.headers;
+    this.default_headers = {
+      'user-agent': `MikoSoft HttpClient-Node/${pkg_json.version}`, // 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36'
+      'accept': '*/*', // 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
+      'cache-control': 'no-cache',
+      'accept-encoding': 'gzip',
+      'connection': 'close', // keep-alive
+      'content-type': 'text/html; charset=UTF-8'
+    };
+
+    // proxy
+    this.proxyAgent = proxyAgent;
   }
+
+
+
+  /********** REQUESTS *********/
+
+  /**
+   * Sending one HTTP request to HTTP server.
+   *  - 301 redirections are not handled
+   *  - retries are not handled
+   * @param {string} url - https://www.adsuu.com/contact
+   * @param {string} method - GET, POST, PUT, DELETE, PATCH
+   * @param {object} body - http body payload
+   * @param {object} headers - http request headers
+   */
+  askOnce(url, method = 'GET', body, headers) {
+    // answer proto object
+    const answer_proto = {
+      httpVersion: undefined,
+      https: undefined,
+      // remoteAddress: // TODO
+      // referrerPolicy: // TODO
+      req: {
+        url,
+        method,
+        body,
+        headers,
+        query: undefined
+      },
+      res: {
+        status: 0,
+        statusMessage: '',
+        headers: undefined,
+        content: undefined
+      },
+      time: {
+        req: this._getTime(),
+        res: undefined,
+        duration: undefined
+      },
+      opts: this.opts
+    };
+
+
+
+    /*** 1.a) check and correct URL ***/
+    try {
+      url = this._correctUrl(url);
+    } catch (err) {
+      const answer = { ...answer_proto }; // clone object to prevent overwrite of proto object properies
+      answer.res.statusMessage = err.message || 'Bad URL definition';
+      answer.time.res = this._getTime();
+      answer.time.duration = this._getTimeDiff(answer.time.req, answer.time.res);
+      return answer;
+    }
+
+    /*** 1.b) parse URL ***/
+    const urlParsed = this._parseUrl(url); // {url, protocol, hostname, port, host, pathname, queryString, queryObject, isHttps}
+
+    /*** 2) init HTTP request  [http.request() options https://nodejs.org/api/http.html#http_http_request_url_options_callback] ***/
+    const requestLib = this._selectRequest(urlParsed.isHttps);
+    const agent = this._hireAgent(urlParsed.isHttps);
+    const requestOpts = {
+      agent,
+      protocol: urlParsed.protocol,
+      hostname: urlParsed.hostname,
+      port: urlParsed.port ? urlParsed.port : urlParsed.isHttps ? 443 : 80,
+      host: urlParsed.host,
+      path: urlParsed.pathname + urlParsed.queryString,
+      method,
+      headers
+    };
+
+    let clientRequest;
+    if (/GET/i.test(method)) {  // GET  - no body
+      if (requestOpts.headers && requestOpts.headers['content-length']) { delete requestOpts.headers['content-length']; } // remove content-length
+      clientRequest = requestLib(requestOpts);
+
+    } else { // POST, PUT, DELETE, ... - with body
+      const body_str = JSON.stringify(body);
+      const contentLength = Buffer.byteLength(body_str, this.opts.encoding);
+      requestOpts.headers['content-length'] = contentLength; // add content-length
+      clientRequest = requestLib(requestOpts);
+      clientRequest.write(body_str, this.opts.encoding);
+    }
+
+
+    /*** 3) send request ***/
+    const promise = new Promise((resolve, reject) => {
+
+      /** 3.A) successful response **/
+      clientRequest.on('response', clientResponse => {
+        // collect raw data e.g. buffer data
+        const buf_chunks = [];
+        clientResponse.on('data', (buf_chunk) => {
+          buf_chunks.push(buf_chunk);
+        });
+
+
+        const resolveAnswer = () => {
+          clearTimeout(timeoutID);
+
+          // concat buffer parts
+          let buf = Buffer.concat(buf_chunks);
+
+          // decompress
+          if (this.opts.decompress) {
+            const isResponseGzip = !!clientResponse.headers['content-encoding'] && clientResponse.headers['content-encoding'] === 'gzip';
+            const isResponseDeflate = !!clientResponse.headers['content-encoding'] && clientResponse.headers['content-encoding'] === 'deflate';
+            if (isResponseGzip) {
+              buf = zlib.gunzipSync(buf); // decompress gzip
+            } else if (isResponseDeflate) {
+              buf = zlib.inflateSync(buf); // decompress deflate
+            } else {
+              buf = zlib.unzipSync(buf); // decompress both gzip or deflate
+            }
+          }
+
+          // convert buffer to string
+          let content;
+          if (this.opts.bufferResponse) {
+            content = buf; // when the URL is file
+          } else {
+            content = buf.toString(this.opts.encoding);
+          }
+
+          // format answer
+          const answer = { ...answer_proto }; // clone object to prevent overwrite of object properies
+          answer.httpVersion = clientResponse.httpVersion;
+          answer.https = urlParsed.isHttps;
+          answer.req.url = url;
+          answer.req.query = urlParsed.queryObject; // from ?a=sasa&b=2 => {a:'sasa', b:2}
+          answer.res.status = clientResponse.statusCode; // 2xx -ok response, 4xx -client error (bad request), 5xx -server error
+          answer.res.statusMessage = clientResponse.statusMessage;
+          answer.res.headers = clientResponse.headers;
+          answer.res.content = content;
+          answer.time.res = this._getTime();
+          answer.time.duration = this._getTimeDiff(answer.time.req, answer.time.res);
+          resolve(answer);
+
+          this._killAgent(agent);
+        };
+
+
+        // when server sends normal response
+        clientResponse.on('end', resolveAnswer);
+
+        // when server sends HTTP header Connection: 'keep-alive' the res.on('end', ...) is never fired
+        const timeoutID = setTimeout(resolveAnswer, this.opts.timeout);
+      });
+
+
+      /** 3.B) on timeout (no response from the server) **/
+      clientRequest.setTimeout(this.opts.timeout);
+      clientRequest.on('timeout', () => {
+        clientRequest.abort();
+        this._killAgent(agent);
+
+        // format answer
+        const answer = { ...answer_proto }; // clone object to prevent overwrite of proto object properies
+        answer.res.status = 408; // 408 - timeout
+        answer.res.statusMessage = `Request aborted due to timeout (${this.opts.timeout} ms) ${url} `;
+        answer.time.res = this._getTime();
+        answer.time.duration = this._getTimeDiff(answer.time.req, answer.time.res);
+
+        resolve(answer);
+      });
+
+
+      /** 3.C) on error (only if promise is not resolved by timeout - prevent double resolving) **/
+      clientRequest.on('error', error => {
+        this._killAgent(agent);
+        const err = this._formatError(error, url);
+
+        // format answer
+        const answer = { ...answer_proto }; // clone object to prevent overwrite of object properies
+        answer.res.status = err.status;
+        answer.res.statusMessage = err.message;
+        answer.time.res = this._getTime();
+        answer.time.duration = this._getTimeDiff(answer.time.req, answer.time.res);
+
+        resolve(answer);
+      });
+
+    });
+
+
+    /*** 4) finish with sending request */
+    clientRequest.end();
+
+
+    return promise;
+
+  } // \askOnce
+
+
+
+  /**
+   * Sending HTTP request to HTTP server.
+   *  - 301 redirections are handled.
+   *  - retries are handled
+   * @param {string} url - https://www.adsuu.com/contact
+   * @param {string} method - GET, POST, PUT, DELETE, PATCH
+   * @param {object} body - http body payload
+   * @param {object} headers - http request headers
+   */
+  async ask(url, method = 'GET', body, headers) {
+    let answer = await this.askOnce(url, method, body, headers);
+    const answers = [answer];
+
+
+    /*** a) HANDLE 3XX REDIRECTS */
+    let redirectCounter = 1;
+    while (!!answer && /^3\d{2}/.test(answer.res.status) && redirectCounter <= this.opts.maxRedirects) { // 300, 301, 302, ...
+      const from = url;
+      const to = answer.res.headers.location || '';
+      const url_new = url_node.resolve(from, to); // redirected URL is in 'location' header
+      this.opts.debug && console.log(`#${redirectCounter} redirection ${answer.res.status} from ${this.url} to ${url_new}`);
+
+      answer = await this.askOnce(url_new, method, body, headers); // repeat request with new url
+      answers.push(answer);
+
+      redirectCounter++;
+    }
+
+
+    /*** b) HANDLE RETRIES when status = 408 timeout */
+    let retryCounter = 1;
+    while (answer.res.status === 408 && retryCounter <= this.opts.retry) {
+      this.opts.debug && console.log(`#${retryCounter} retry due to timeout (${this.opts.timeout}) on ${url}`);
+      await new Promise(resolve => setTimeout(resolve, this.opts.retryDelay)); // delay before retrial
+
+      answer = await this.askOnce(url, method, body, headers);
+      answers.push(answer);
+
+      retryCounter++;
+    }
+
+
+    return answers;
+  }
+
+
+
+  /**
+   * Send request and get response in JSON format. Suitable for API.
+   * @param {string} url - https://api.adsuu.com/contact
+   * @param {string} method - GET, POST, PUT, DELETE, PATCH
+   * @param {object|string} body - http body as Object or String type
+   * @param {object} headers - http request headers
+   */
+  async askJSON(url, method = 'GET', body, headers) {
+    // convert body string to object
+    let body_obj = body;
+    if (typeof body === 'string') {
+      try {
+        body_obj = JSON.parse(body);
+      } catch (err) {
+        throw new Error('Body string is not valid JSON.');
+      }
+    } else if (!body) { // undefined, null or empty string
+      body_obj = {};
+    }
+
+    // JSON request headers
+    const headers2 = headers ??
+    {
+      'content-type': 'application/json; charset=utf-8',
+      'accept': 'application/json'
+    };
+
+    const answer = await this.askOnce(url, method, body_obj, headers2);
+
+    // convert string to object if the content has valid JSON format
+    try {
+      if (answer.res.content) {
+        answer.res.content = JSON.parse(answer.res.content);
+      }
+    } catch (err) {
+      console.log(`The answer's res.content has invalid JSON: ${answer.res.content}`);
+    }
+
+    return answer;
+  }
+
+
+
+
+  /**
+   * Get request and response streams which can be used for piping. For example: clientResponse.pipe(file)
+   * @param {string} url - https://www.dex8.com
+   * @param {string} method - GET, POST, PUT, DELETE, PATCH
+   * @param {object} body - http body payload (when for example the POST method is used)
+   * @param {object} headers - http request headers
+   * @returns {Promise<{clientrequest:Stream, clientResponse:Stream}>}
+   */
+  grabStreams(url, method = 'GET', body, headers) {
+    /*** 1.a) check and correct URL ***/
+    url = this._correctUrl(url);
+
+    /*** 1.b) parse URL ***/
+    const urlParsed = this._parseUrl(url); // {url, protocol, hostname, port, host, pathname, queryString, queryObject, isHttps}
+
+    /*** 2) init HTTP request ***/
+    const requestLib = this._selectRequest(urlParsed.isHttps);
+    const agent = this._hireAgent(urlParsed.isHttps);
+    const requestOpts = {
+      agent,
+      protocol: urlParsed.protocol,
+      hostname: urlParsed.hostname,
+      port: urlParsed.port ? urlParsed.port : urlParsed.isHttps ? 443 : 80,
+      host: urlParsed.host,
+      path: urlParsed.pathname + urlParsed.queryString,
+      method,
+      headers
+    };
+
+    let clientRequest;
+    if (/GET/i.test(method)) {  // GET  - no body
+      if (requestOpts.headers && requestOpts.headers['content-length']) { delete requestOpts.headers['content-length']; } // remove content-length
+      clientRequest = requestLib(requestOpts);
+
+    } else { // POST, PUT, DELETE, ... - with body
+      const body_str = JSON.stringify(body);
+      const contentLength = Buffer.byteLength(body_str, this.opts.encoding);
+      requestOpts.headers['content-length'] = contentLength; // add content-length
+      clientRequest = requestLib(requestOpts);
+      clientRequest.write(body_str, this.opts.encoding);
+    }
+
+    const promise = new Promise((resolve, reject) => {
+      clientRequest.on('response', clientResponse => {
+        resolve({ clientRequest, clientResponse });
+      });
+
+      clientRequest.setTimeout(this.opts.timeout);
+
+      clientRequest.on('timeout', () => {
+        this._killAgent(agent);
+        reject(new Error(`The timeout after ${this.opts.timeout} ms`));
+      });
+
+      clientRequest.on('error', error => {
+        this._killAgent(agent);
+        reject(error);
+      });
+
+      clientRequest.end();
+    });
+
+    return promise;
+  }
+
+
+  /********** MISC *********/
+  /**
+   * Print the object to the console.
+   * @param {object} obj
+   */
+  print(obj) {
+    const opts = {
+      showHidden: false,
+      depth: 5,
+      colors: true,
+      customInspect: true,
+      showProxy: false,
+      maxArrayLength: 10,
+      maxStringLength: 350,
+      breakLength: 80,
+      compact: false,
+      sorted: false,
+      getters: false,
+      numericSeparator: false
+    };
+    console.log(util.inspect(obj, opts));
+  }
+
 
 
 
@@ -75,31 +429,33 @@ class HttpClient {
    * @param {string} url - http://www.adsuu.com/some/thing.php?x=2&y=3
    */
   _parseUrl(url) {
-    url = this._correctUrl(url);
     const urlObj = new url_node.URL(url);
-    this.url = url;
-    this.protocol = urlObj.protocol;
-    this.hostname = urlObj.hostname;
-    this.port = urlObj.port;
-    this.host = urlObj.host;
-    this.pathname = urlObj.pathname;
-    this.queryString = urlObj.search;
-    this.queryObject = urlObj.searchParams;
-    this.isHttps = /^https/.test(url);
+
+    const urlParsed = {
+      url: urlObj.href, // Use href for the full URL
+      protocol: urlObj.protocol,
+      hostname: urlObj.hostname,
+      port: urlObj.port,
+      host: urlObj.host,
+      pathname: urlObj.pathname,
+      queryString: urlObj.search,
+      queryObject: urlObj.searchParams,
+      isHttps: /^https/.test(url),
+    };
 
     // debug
     if (this.opts.debug) {
-      console.log('this.url:: ', this.url); // http://localhost:8001/www/products?category=mačke
-      console.log('this.protocol:: ', this.protocol); // http:
-      console.log('this.hostname:: ', this.hostname); // localhost
-      console.log('this.port:: ', this.port); // 8001
-      console.log('this.host:: ', this.host); // localhost:8001
-      console.log('this.pathname:: ', this.pathname); // /www/products
-      console.log('this.queryString:: ', this.queryString); // ?category=mačke
-      console.log('this.queryObject:: ', this.queryObject); // { 'category' => 'mačke' }
+      console.log('url:: ', urlParsed.url); // http://localhost:8001/www/products?category=mačke
+      console.log('protocol:: ', urlParsed.protocol); // http:
+      console.log('hostname:: ', urlParsed.hostname); // localhost
+      console.log('port:: ', urlParsed.port); // 8001
+      console.log('host:: ', urlParsed.host); // localhost:8001
+      console.log('pathname:: ', urlParsed.pathname); // /www/products
+      console.log('queryString:: ', urlParsed.queryString); // ?category=mačke
+      console.log('queryObject:: ', urlParsed.queryObject); // { 'category' => 'mačke' }
     }
 
-    return url;
+    return urlParsed;
   }
 
 
@@ -184,30 +540,29 @@ class HttpClient {
   /**
    * Choose http or https NodeJS libraries.
    */
-  _selectRequest() {
-    const requestLib = this.isHttps ? https.request.bind(https) : http.request.bind(http);
+  _selectRequest(isHttps) {
+    const requestLib = isHttps ? https.request.bind(https) : http.request.bind(http);
     return requestLib;
   }
 
 
   /**
    * Create new http/https agent https://nodejs.org/api/http.html#http_new_agent_options
-   * @param {Object} opts
    */
-  _hireAgent(opts) {
+  _hireAgent(isHttps) {
     let agent;
     if (!!this.proxyAgent) {
       agent = this.proxyAgent;
     } else {
       // default agent options https://nodejs.org/api/http.html#http_new_agent_options
       const options = {
-        timeout: opts.timeout, // close socket on certain period of time
+        timeout: this.opts.timeout, // close socket on certain period of time
         keepAlive: false, // keep socket open so it can be used for future requests without having to reestablish new TCP connection (false)
         keepAliveMsecs: 1000, // initial delay to receive packets when keepAlive:true (1000)
         maxSockets: Infinity, // max allowed sockets (Infinity)
         maxFreeSockets: 256, // max allowed sockets to leave open in a free state when keepAlive:true (256)
       };
-      agent = this.isHttps ? new https.Agent(options) : new http.Agent(options);
+      agent = isHttps ? new https.Agent(options) : new http.Agent(options);
     }
     return agent;
   }
@@ -275,450 +630,6 @@ class HttpClient {
   }
 
 
-
-
-  /********** REQUESTS *********/
-
-  /**
-   * Sending one HTTP request to HTTP server.
-   *  - 301 redirections are not handled.
-   *  - retries are not handled
-   * @param {string} url - https://www.adsuu.com/contact
-   * @param {string} method - GET, POST, PUT, DELETE, PATCH
-   * @param {object} body_obj - http body payload
-   */
-  askOnce(url, method = 'GET', body_obj) {
-    // answer proto object
-    const answer_proto = {
-      requestURL: url,
-      requestMethod: method,
-      status: 0,
-      statusMessage: '',
-      httpVersion: undefined,
-      decompressed: false,
-      https: undefined,
-      // remoteAddress: // TODO
-      // referrerPolicy: // TODO
-      req: {
-        headers: this.headers,
-        query: {},
-        payload: undefined,
-        requestOpts: undefined
-      },
-      res: {
-        headers: undefined,
-        content: undefined
-      },
-      time: {
-        req: this._getTime(),
-        res: undefined,
-        duration: undefined
-      }
-    };
-
-
-
-    /*** 1) check and correct URL ***/
-    try {
-      url = this._parseUrl(url);
-    } catch (err) {
-      const answer = { ...answer_proto }; // clone object to prevent overwrite of object properies once promise is resolved
-      answer.status = 400; // client error - Bad Request
-      answer.statusMessage = err.message || 'Bad URL definition';
-      answer.time.res = this._getTime();
-      answer.time.duration = this._getTimeDiff(answer.time.req, answer.time.res);
-      return answer; // send answer and stop further execution
-    }
-
-
-    /*** 2) init HTTP request  [http.request() options https://nodejs.org/api/http.html#http_http_request_url_options_callback] ***/
-    const requestLib = this._selectRequest();
-    const agent = this._hireAgent(this.opts);
-    const requestOpts = {
-      agent,
-      protocol: this.protocol,
-      hostname: this.hostname,
-      port: this.port ? this.port : this.isHttps ? 443 : 80,
-      host: this.host,
-      path: this.pathname + this.queryString,
-      method,
-      headers: this.headers
-    };
-
-    let clientRequest;
-    if (/GET/i.test(method)) {  // GET  - no body
-      if (requestOpts.headers && requestOpts.headers['content-length']) { delete requestOpts.headers['content-length']; } // remove content-length
-      clientRequest = requestLib(requestOpts);
-
-    } else { // POST, PUT, DELETE, ... - with body
-      const body_str = JSON.stringify(body_obj);
-      const contentLength = Buffer.byteLength(body_str, this.opts.encoding);
-      requestOpts.headers['content-length'] = contentLength; // add content-length
-      clientRequest = requestLib(requestOpts);
-      clientRequest.write(body_str, this.opts.encoding);
-    }
-
-
-    /*** 3) send request ***/
-    const promise = new Promise((resolve, reject) => {
-
-      /** 3.A) successful response **/
-      clientRequest.on('response', clientResponse => {
-        // collect raw data e.g. buffer data
-        const buf_chunks = [];
-        clientResponse.on('data', (buf_chunk) => {
-          buf_chunks.push(buf_chunk);
-        });
-
-
-        const resolveAnswer = () => {
-          clearTimeout(timeoutID);
-
-          // concat buffer parts
-          let buf = Buffer.concat(buf_chunks);
-
-          // decompress
-          let decompressed = false; // gzip or deflate
-          const isResponseGzip = !!clientResponse.headers['content-encoding'] && clientResponse.headers['content-encoding'] === 'gzip';
-          const isResponseDeflate = !!clientResponse.headers['content-encoding'] && clientResponse.headers['content-encoding'] === 'deflate';
-          if (isResponseGzip) {
-            decompressed = true;
-            buf = zlib.gunzipSync(buf); // decompress gzip
-          } else if (isResponseDeflate) {
-            decompressed = true;
-            buf = zlib.inflateSync(buf); // decompress deflate
-          } else if (this.opts.decompress) {
-            decompressed = true;
-            buf = zlib.unzipSync(buf); // decompress gzip or deflate
-          }
-
-          // convert buffer to string
-          let content;
-          if (this.opts.bufferResponse) {
-            content = buf; // when the URL is file
-          } else {
-            content = buf.toString(this.opts.encoding);
-          }
-
-          // format answer
-          const answer = { ...answer_proto }; // clone object to prevent overwrite of object properies once promise is resolved
-          answer.requestURL = url;
-          answer.status = clientResponse.statusCode; // 2xx -ok response, 4xx -client error (bad request), 5xx -server error
-          answer.statusMessage = clientResponse.statusMessage;
-          answer.httpVersion = clientResponse.httpVersion;
-          answer.decompressed = decompressed;
-          answer.https = this.isHttps;
-          answer.req.query = this._toQueryObject(this.queryString); // from ?a=sasa&b=2 => {a:'sasa', b:2}
-          answer.req.headers = this.headers;
-          answer.req.payload = body_obj;
-          answer.req.requestOpts = requestOpts;
-          delete answer.req.requestOpts.agent; // because it has circular object
-          answer.res.headers = clientResponse.headers;
-          answer.res.content = content;
-          answer.time.res = this._getTime();
-          answer.time.duration = this._getTimeDiff(answer.time.req, answer.time.res);
-          resolve(answer);
-
-          this._killAgent(agent);
-        };
-
-
-        // when server sends normal response
-        clientResponse.on('end', resolveAnswer);
-
-        // when server sends HTTP header Connection: 'keep-alive' the res.on('end', ...) is never fired
-        const timeoutID = setTimeout(resolveAnswer, this.opts.timeout);
-      });
-
-
-      /** 3.B) on timeout (no response from the server) **/
-      clientRequest.setTimeout(this.opts.timeout);
-      clientRequest.on('timeout', () => {
-        this._killAgent(agent);
-
-        // format answer
-        const answer = { ...answer_proto }; // clone object to prevent overwrite of object properies once promise is resolved
-        answer.status = 408; // 408 - timeout
-        answer.statusMessage = `Request aborted due to timeout (${this.opts.timeout} ms) ${url} `;
-        answer.time.res = this._getTime();
-        answer.time.duration = this._getTimeDiff(answer.time.req, answer.time.res);
-
-        resolve(answer);
-      });
-
-
-      /** 3.C) on error (only if promise is not resolved by timeout - prevent double resolving) **/
-      clientRequest.on('error', error => {
-        this._killAgent(agent);
-        const err = this._formatError(error, url);
-
-        // format answer
-        const answer = { ...answer_proto }; // clone object to prevent overwrite of object properies once promise is resolved
-        answer.status = err.status;
-        answer.statusMessage = err.message;
-        answer.time.res = this._getTime();
-        answer.time.duration = this._getTimeDiff(answer.time.req, answer.time.res);
-
-        resolve(answer);
-      });
-
-    });
-
-
-    /*** 4) finish with sending request */
-    clientRequest.end();
-
-
-    return promise;
-
-  } // \askOnce
-
-
-
-  /**
-   * Sending HTTP request to HTTP server.
-   *  - 301 redirections are handled.
-   *  - retries are handled
-   * @param {string} url - https://www.adsuu.com/contact
-   * @param {string} method - GET, POST, PUT, DELETE, PATCH
-   * @param {object} body_obj - http body
-   */
-  async ask(url, method = 'GET', body_obj) {
-    let answer = await this.askOnce(url, method, body_obj);
-    const answers = [answer];
-
-
-    /*** a) HANDLE 3XX REDIRECTS */
-    let redirectCounter = 1;
-    while (!!answer && /^3\d{2}/.test(answer.status) && redirectCounter <= this.opts.maxRedirects) { // 300, 301, 302, ...
-      const from = url;
-      const to = answer.res.headers.location || '';
-      const url_new = url_node.resolve(from, to); // redirected URL is in 'location' header
-      this.opts.debug && console.log(`#${redirectCounter} redirection ${answer.status} from ${this.url} to ${url_new}`);
-
-      answer = await this.askOnce(url_new, method, body_obj); // repeat request with new url
-      answers.push(answer);
-
-      redirectCounter++;
-    }
-
-
-    /*** b) HANDLE RETRIES when status = 408 timeout */
-    let retryCounter = 1;
-    while (answer.status === 408 && retryCounter <= this.opts.retry) {
-      this.opts.debug && console.log(`#${retryCounter} retry due to timeout (${this.opts.timeout}) on ${url}`);
-      await new Promise(resolve => setTimeout(resolve, this.opts.retryDelay)); // delay before retrial
-
-      answer = await this.askOnce(url, method, body_obj);
-      answers.push(answer);
-
-      retryCounter++;
-    }
-
-
-    return answers;
-
-  }
-
-
-
-  /**
-   * Send request and get response in JSON format. Suitable for API.
-   * @param {string} url - https://api.adsuu.com/contact
-   * @param {string} method - GET, POST, PUT, DELETE, PATCH
-   * @param {object|string} body - http body as Object or String type
-   */
-  async askJSON(url, method = 'GET', body) {
-    // convert body string to object
-    let body_obj = body;
-    if (typeof body === 'string') {
-      try {
-        body_obj = JSON.parse(body);
-      } catch (err) {
-        throw new Error('Body string is not valid JSON.');
-      }
-    } else if (body === undefined || body === '') { // undefined or empty string
-      body_obj = {};
-    }
-
-    // JSON request headers
-    this.setHeaders({
-      'content-type': 'application/json; charset=utf-8',
-      'accept': 'application/json'
-    });
-
-    const answer = await this.askOnce(url, method, body_obj);
-
-    // convert string to object if the content has valid JSON format
-    try {
-      if (answer.res.content) {
-        answer.res.content = JSON.parse(answer.res.content);
-      }
-    } catch (err) {
-      console.log(`The answer's res.content has invalid JSON: ${answer.res.content}`);
-    }
-
-    return answer;
-  }
-
-
-
-
-  /**
-   * Get request and response streams which can be used for piping. For example: clientResponse.pipe(file)
-   * @param {string} url - https://www.dex8.com
-   * @param {string} method - GET, POST, PUT, DELETE, PATCH
-   * @param {object} body_obj - http body payload (when for example the POST method is used)
-   * @returns {Promise<{clientrequest:Stream, clientResponse:Stream}>}
-   */
-  grabStreams(url, method = 'GET', body_obj) {
-    /*** 1) check and correct URL ***/
-    try {
-      url = this._parseUrl(url);
-    } catch (err) {
-      console.log(err);
-      return;
-    }
-
-    /*** 2) init HTTP request ***/
-    const requestLib = this._selectRequest();
-    const agent = this._hireAgent(this.opts);
-    const requestOpts = {
-      agent,
-      hostname: this.hostname,
-      port: this.port ? this.port : this.isHttps ? 443 : 80,
-      host: this.host,
-      path: this.pathname + this.queryString,
-      method,
-      headers: this.headers
-    };
-
-    let clientRequest;
-    if (/GET/i.test(method)) {  // GET  - no body
-      if (requestOpts.headers && requestOpts.headers['content-length']) { delete requestOpts.headers['content-length']; } // remove content-length
-      clientRequest = requestLib(requestOpts);
-
-    } else { // POST, PUT, DELETE, ... - with body
-      const body_str = JSON.stringify(body_obj);
-      const contentLength = Buffer.byteLength(body_str, this.opts.encoding);
-      requestOpts.headers['content-length'] = contentLength; // add content-length
-      clientRequest = requestLib(requestOpts);
-      clientRequest.write(body_str, this.opts.encoding);
-    }
-
-    const promise = new Promise((resolve, reject) => {
-      clientRequest.on('response', clientResponse => {
-        resolve({ clientRequest, clientResponse });
-      });
-
-      clientRequest.setTimeout(this.opts.timeout);
-
-      clientRequest.on('timeout', () => {
-        this._killAgent(agent);
-        reject(new Error(`The timeout after ${this.opts.timeout} ms`));
-      });
-
-      clientRequest.on('error', error => {
-        this._killAgent(agent);
-        reject(error);
-      });
-
-      clientRequest.end();
-    });
-
-    return promise;
-  }
-
-
-
-
-  /********** REQUEST HEADERS *********/
-  /**
-   * Change header object.
-   * Previously defined this.headers properties will be overwritten.
-   * @param {object} headerObj - {'authorization', 'user-agent', 'accept', 'cache-control', 'host', 'accept-encoding', 'connection'}
-   */
-  setHeaders(headerObj) {
-    this.headers = Object.assign(this.headers, headerObj);
-    this._lowercaseHeaders();
-  }
-
-  /**
-   * Set (add/update) header.
-   * Previously defined header will be overwritten.
-   * @param {string} headerName - 'content-type' or 'Content-Type'
-   * @param {string} headerValue - 'text/html; charset=UTF-8'
-   */
-  setHeader(headerName, headerValue) {
-    const headername = headerName.toLowerCase();
-    this.headers[headername] = headerValue;
-    this._lowercaseHeaders();
-  }
-
-  /**
-   * Delete header object.
-   * @param {array} headerNames - array of header names    ['content-type', 'accept']
-   */
-  delHeaders(headerNames) {
-    this._lowercaseHeaders();
-    headerNames.forEach(headerName => {
-      if (!headerName) { return; }
-      delete this.headers[headerName.toLowerCase()];
-    });
-  }
-
-  /**
-   * Get active headers
-   */
-  getHeaders() {
-    return this.headers;
-  }
-
-  /**
-   * Set all header property names to lower case. Content-Type -> content-type
-   */
-  _lowercaseHeaders() {
-    const headersCloned = { ...this.headers };
-    this.headers = {};
-    Object.keys(headersCloned).forEach(headerProp => {
-      const headerprop = headerProp.toLowerCase();
-      this.headers[headerprop] = headersCloned[headerProp];
-    });
-  }
-
-
-
-  /********** MISC *********/
-  /**
-   * Inject the proxy agent
-   * @param {object} proxyAgent - proxy agent (https://www.npmjs.com/package/https-proxy-agent)
-   */
-  injectProxyAgent(proxyAgent) {
-    this.proxyAgent = proxyAgent;
-  }
-
-
-  /**
-   * Print the object to the console.
-   * @param {object} obj
-   */
-  print(obj) {
-    const opts = {
-      showHidden: false,
-      depth: 5,
-      colors: true,
-      customInspect: true,
-      showProxy: false,
-      maxArrayLength: 10,
-      maxStringLength: 350,
-      breakLength: 80,
-      compact: false,
-      sorted: false,
-      getters: false,
-      numericSeparator: false
-    };
-    console.log(util.inspect(obj, opts));
-  }
 
 
 }

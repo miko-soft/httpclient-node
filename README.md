@@ -1,147 +1,167 @@
 # @mikosoft/httpclient-node
-> Simple but powerful HTTP client for NodeJS.
+> A simple but powerful HTTP client for Node.js.
 
-HTTP Client utilises HTTP protocol to connect to the HTTP server which can be a web server, API or something else. After I noticed that there's no efficient HTTP Client for NodeJS this library was developed. It is made for the NodeJS environment and uses both HTTP and HTTPS.
+Why?
+*The HTTP Client leverages the HTTP protocol to establish connections with an HTTP server, which can be a web server, API, or another service. Recognizing the lack of an efficient HTTP Client for Node.js, this library was developed specifically for the Node.js environment. It supports both HTTP and HTTPS protocols, ensuring communication and optimized performance.*
 
 
 ## Features
-- URL auto correction
-- auto detect secure https protocol
-- handle 301 redirects
-- retry on HTTP response error
-- HTTP response is formatted nicely and returned as JS Promise so async/await can be used
-- response is an array where elements are responses from every stage of 301 HTTP redirection
-- response in JSON format for APIs
-- rich formatted error responses
-- decompress gzip responses automatically
-- do not parse JavaScript in the HTML document
-- no npm dependencies
-
+- Supports GET, POST, PUT, DELETE, and PATCH methods.
+- Handles retries and timeouts.
+- Supports HTTP and HTTPS requests.
+- Can process redirects (3XX).
+- Supports gzip and deflate decompression.
+- Custom request headers.
+- Optional proxy support.
+- Can return responses as a buffer for file handling.
+- Supports JSON API requests with automatic parsing.
+- Provides request and response streams for piping.
 
 
 ## Installation
-```bash
-$ npm install --save @mikosoft/httpclient-node
+```sh
+npm install --save @mikosoft/httpclient-node
 ```
 
-
-## Example
+## Usage
+### Basic Request
 ```js
-/*** NodeJS script ***/
 const { HttpClient } = require('@mikosoft/httpclient-node');
-
-const getUrl = async () => {
-  try {
-    const opts = {
-      encodeURI: false,
-      encoding: 'utf8',
-      timeout: 3000,
-      retry: 2, // used only in ask() method
-      retryDelay: 2100, // used only in ask() method
-      maxRedirects: 3, // used only in ask() method
-      headers: {
-        'authorization': '',
-        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36',
-        'accept': '*/*', // 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
-        'cache-control': 'no-cache',
-        'host': '',
-        'accept-encoding': 'gzip',
-        'connection': 'close', // keep-alive
-        'content-type': 'text/html; charset=UTF-8'
-      },
-      debug: false
-    };
-
-    const hcn = new HttpClient(opts); // http client instance
-    const answers = await hcn.ask('http://www.adsuu.com');
-    console.log(answers);
-
-  } catch (err) { throw err; }
-};
-
-
-getUrl().catch(console.error);
+const httpClient = new HttpClient();
+httpClient.askOnce('https://example.com')
+  .then(response => {
+    console.log(response.res.content);
+  })
+  .catch(error => console.error(error));
 ```
 
-Other examples are in /tests/ folder.
+### JSON API Request
+```js
+httpClient.askJSON('https://api.example.com/data', 'POST', { key: 'value' })
+  .then(response => console.log(response.res.content))
+  .catch(error => console.error(error));
+```
 
+### Handling Streams
+```js
+const fs = require('fs');
+httpClient.grabStreams('https://example.com/file.pdf', 'GET')
+  .then(({ clientResponse }) => {
+    const fileStream = fs.createWriteStream('file.pdf');
+    clientResponse.pipe(fileStream);
+  })
+  .catch(error => console.error(error));
+```
+
+
+## Options
+| Option          | Default Value | Description |
+|---------------|--------------|-------------|
+| `encodeURI` | `false` | Encodes spaces as `%20`. |
+| `encoding` | `'utf8'` | Encoding for response content. Use `'binary'` for files. |
+| `timeout` | `8000` | Request timeout in milliseconds. |
+| `retry` | `3` | Number of retry attempts on failure. |
+| `retryDelay` | `5000` | Delay between retries in milliseconds. |
+| `maxRedirects` | `3` | Number of redirects to follow. |
+| `decompress` | `false` | Enables gzip/deflate decompression. |
+| `bufferResponse` | `false` | Returns response as a buffer instead of a string. |
+| `debug` | `false` | Enables logging. |
+
+```js
+const opts = {
+  encodeURI: false,
+  encoding: 'utf8',
+  timeout: 8000,
+  retry: 3,
+  retryDelay: 5000,
+  maxRedirects: 3,
+  decompress: false,
+  bufferResponse: false,
+  debug: false
+};
+```
+
+
+## Proxy Support
+To use a proxy, pass an instance of `https-proxy-agent`:
+
+```js
+const HttpsProxyAgent = require('https-proxy-agent');
+const proxyAgent = new HttpsProxyAgent('http://proxy-server:port');
+
+const clientWithProxy = new HttpClient({}, proxyAgent);
+clientWithProxy.ask('https://example.com', 'GET')
+  .then(response => console.log(response.res.content));
+```
 
 
 ## API
 
-#### constructor(opts:{encodeURI:boolean, timeout:number, retry:number, retryDelay:number, maxRedirects:number, headers:object})
-- **encodeURI**	Encode URI before request is sent.	(false)
-- **timeout**	Close socket on certain period of time in milliseconds. Same as timeout in NodeJS HTTP library.	(8000)
-- **retry**	When HTTP Client receives an error response it will try to send requests repeatedly. The retry number determines the max allowed retries. Used only in *ask()* method.	(3)
-- **retryDelay**	Time delay after each retry in milliseconds. Used only in *ask()* method.	(5500)
-- **maxRedirects**	When HTTP Client receives 301 in Header response it will try to send new request to redirected URL. Number maxRedirects determines max redirects allowed to prevent infinite loops. Used only in *ask()* method.	(3)
-- **headers**	Definition of HTTP Headers used in HTTP request.	(see below)
+#### constructor(opts:object, proxyAgent:object)
 
-```js
-headers::
-{
-  'authorization': '',
-  'user-agent': `DEX8-SDK/${pkg_json.version} https://dex8.com`, // 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36'
-  'accept': '*/*', // 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
-  'cache-control': 'no-cache',
-  'host': '',
-  'accept-encoding': 'gzip',
-  'connection': 'close', // keep-alive
-  'content-type': 'text/html; charset=UTF-8'
-}
-```
-
-
-#### askOnce(url, method = 'GET', body_obj)
+#### askOnce(url:string, method:string, body:object, headers:object)
 Send one time HTTP/HTTPS request. Redirection is not handled. Response is a Promise so async/await can be used.
-*hcn.askOnce('https://www.dummy-api.com/create', 'POST', {first_name: 'Saša'});*
+*hcn.askOnce('https://www.dummy-api.com/create', 'POST', {first_name: 'Saša'}, hcn.default_headers);*
 ```
 answer (HTTP response) is formatted as simple object
 ------------------------------------------------------------
-{
-  requestURL: 'http://www.adsuu.com',
-  requestMethod: 'GET',
-  status: 200,
-  statusMessage: 'OK',
+{{
   httpVersion: '1.1',
-  gzip: true,
   https: false,
   req: {
+    url: 'http://www.adsuu.com?x=%C4%8Da',
+    method: 'GET',
+    body: null,
     headers: {
-      authorization: '',
-      'user-agent': 'DEX8-SDK/2.0.5 https://dex8.com',
+      'user-agent': 'MikoSoft HttpClient-Node/1.0.4',
       accept: '*/*',
       'cache-control': 'no-cache',
-      host: '',
       'accept-encoding': 'gzip',
       connection: 'close',
       'content-type': 'text/html; charset=UTF-8'
     },
-    payload: undefined
+    query: URLSearchParams { 'x' => 'ča' }
   },
   res: {
+    status: 301,
+    statusMessage: 'Moved Permanently',
     headers: {
-      server: 'nginx',
-      date: 'Fri, 06 Mar 2020 11:20:54 GMT',
-      'content-type': 'text/html; charset=UTF-8',
-      'transfer-encoding': 'chunked',
+      server: 'nginx/1.17.10 (Ubuntu)',
+      date: 'Wed, 12 Mar 2025 10:22:47 GMT',
+      'content-type': 'text/html',
+      'content-length': '179',
       connection: 'close',
-      vary: 'Accept-Encoding',
-      'x-powered-by': 'PHP/5.6.40',
-      'x-xss-protection': '1; mode=block',
-      'x-content-type-options': 'nosniff',
-      'x-nginx-cache-status': 'MISS',
-      'x-server-powered-by': 'Engintron',
-      'content-encoding': 'gzip'
+      location: 'https://www.adsuu.com/?x=%C4%8Da'
     },
-    content: '\n' +
-      '\n' +
-      ''
+    content: '<html>\r\n' +
+      '<head><title>301 Moved Permanently</title></head>\r\n' +
+      '<body>\r\n' +
+      '<center><h1>301 Moved Permanently</h1></center>\r\n' +
+      '<hr><center>nginx/1.17.10 (Ubuntu)</center>\r\n' +
+      '</body>\r\n' +
+      '</html>\r\n'
+  },
+  time: {
+    req: '2025-03-12T10:22:47.073Z',
+    res: '2025-03-12T10:22:47.291Z',
+    duration: 0.218
+  },
+  opts: {
+    encodeURI: true,
+    encoding: 'utf8',
+    timeout: 8000,
+    retry: 3,
+    retryDelay: 5000,
+    maxRedirects: 3,
+    decompress: false,
+    bufferResponse: false,
+    debug: false
   }
+}
 ```
 
 
-#### ask(url, method = 'GET', body_obj)
+#### ask(url:string, method:string, body:object, headers:object)
 Sends HTTP/HTTPS request to HTTP server. Redirection is handled maxRedirects times. Response is an array of resolved responses for every redirection stage. If there's no redirects then this array will contain only one response.
 *hcn.ask('www.yahoo.com');*
 
@@ -150,114 +170,136 @@ answers:
 -----------------------------
 [
   {
-    requestURL: 'http://bing.com',
-    requestMethod: 'GET',
-    status: 301,
-    statusMessage: 'Moved Permanently',
     httpVersion: '1.1',
-    gzip: false,
     https: false,
     req: {
-      headers: {
-        authorization: '',
-        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36',
-        accept: '*/*',
-        'cache-control': 'no-cache',
-        host: '',
-        'accept-encoding': 'gzip',
-        connection: 'close',
-        'content-type': 'text/html; charset=UTF-8'
-      },
-      payload: undefined
+      url: 'http://ebay.com',
+      method: 'GET',
+      body: undefined,
+      headers: undefined,
+      query: URLSearchParams {}
     },
     res: {
+      status: 301,
+      statusMessage: 'Moved Permanently',
       headers: {
-        location: 'http://www.bing.com/',
-        server: 'Microsoft-IIS/10.0',
-        'x-msedge-ref': 'Ref A: BDA43350AD8448E0BF90BD7557179CC9 Ref B: ZAG30EDGE0120 Ref C: 2020-03-06T11:28:13Z',
-        'set-cookie': [Array],
-        date: 'Fri, 06 Mar 2020 11:28:13 GMT',
-        connection: 'close',
-        'content-length': '0'
-      },
-      content: ''
-    }
-  },
-  {
-    requestURL: 'http://www.bing.com/',
-    requestMethod: 'GET',
-    status: 302,
-    statusMessage: '',
-    httpVersion: '1.1',
-    gzip: true,
-    https: false,
-    req: {
-      headers: {
-        authorization: '',
-        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36',
-        accept: '*/*',
-        'cache-control': 'no-cache',
-        host: '',
-        'accept-encoding': 'gzip',
-        connection: 'close',
-        'content-type': 'text/html; charset=UTF-8'
-      },
-      payload: undefined
-    },
-    res: {
-      headers: {
-        'cache-control': 'private',
-        'content-length': '179',
-        'content-type': 'text/html; charset=utf-8',
-        'content-encoding': 'gzip',
-        location: 'https://www.bing.com:443/?toHttps=1&redig=D1B8D19DDBFC4CD8A6B9FA690AD3919B',
-        vary: 'Accept-Encoding',
-        'x-msedge-ref': 'Ref A: 41FC9D16CE464F90A17D18B339B3A0A4 Ref B: ZAG30EDGE0116 Ref C: 2020-03-06T11:28:13Z',
-        'set-cookie': [Array],
-        date: 'Fri, 06 Mar 2020 11:28:13 GMT',
+        server: 'AkamaiGHost',
+        'content-length': '0',
+        location: 'https://ebay.com/',
+        expires: 'Wed, 12 Mar 2025 10:23:56 GMT',
+        'cache-control': 'max-age=0, no-cache, no-store',
+        pragma: 'no-cache',
+        date: 'Wed, 12 Mar 2025 10:23:56 GMT',
         connection: 'close'
       },
-      content: '\r\n' +
-        'Object moved to here.\r\n' +
-        '\r\n'
+      content: 0
+    },
+    time: {
+      req: '2025-03-12T10:23:56.113Z',
+      res: '2025-03-12T10:23:56.717Z',
+      duration: 0.604
+    },
+    opts: {
+      encodeURI: false,
+      encoding: 'utf8',
+      timeout: 3000,
+      retry: 2,
+      retryDelay: 2100,
+      maxRedirects: 3,
+      decompress: false,
+      bufferResponse: false,
+      debug: false
     }
   },
   {
-    requestURL: 'https://www.bing.com:443/?toHttps=1&redig=D1B8D19DDBFC4CD8A6B9FA690AD3919B',
-    requestMethod: 'GET',
-    status: 200,
-    statusMessage: 'OK',
     httpVersion: '1.1',
-    gzip: true,
     https: true,
     req: {
-      headers: {
-        authorization: '',
-        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36',
-        accept: '*/*',
-        'cache-control': 'no-cache',
-        host: '',
-        'accept-encoding': 'gzip',
-        connection: 'close',
-        'content-type': 'text/html; charset=UTF-8'
-      },
-      payload: undefined
+      url: 'https://ebay.com/',
+      method: 'GET',
+      body: undefined,
+      headers: undefined,
+      query: URLSearchParams {}
     },
     res: {
+      status: 301,
+      statusMessage: 'Moved Permanently',
       headers: {
-        'cache-control': 'private',
-        'transfer-encoding': 'chunked',
-        'content-type': 'text/html; charset=utf-8',
-        'content-encoding': 'gzip',
-        vary: 'Accept-Encoding',
-        p3p: 'CP="NON UNI COM NAV STA LOC CURa DEVa PSAa PSDa OUR IND"',
-        'set-cookie': [Array],
-        'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
-        'x-msedge-ref': 'Ref A: 7F6C67E1D8364C0DA87DE69A2455A213 Ref B: ZAG30EDGE0220 Ref C: 2020-03-06T11:28:14Z',
-        date: 'Fri, 06 Mar 2020 11:28:13 GMT',
-        connection: 'close'
+        location: 'https://www.ebay.com/',
+        'x-ebay-pop-id': 'SLBSLCAZ03',
+        server: 'ebay-proxy-server',
+        'content-length': '0',
+        expires: 'Wed, 12 Mar 2025 10:23:57 GMT',
+        'cache-control': 'max-age=0, no-cache, no-store',
+        pragma: 'no-cache',
+        date: 'Wed, 12 Mar 2025 10:23:57 GMT',
+        connection: 'close',
+        'strict-transport-security': 'max-age=31536000'
       },
-      content: ' ... '
+      content: 0
+    },
+    time: {
+      req: '2025-03-12T10:23:56.723Z',
+      res: '2025-03-12T10:23:57.973Z',
+      duration: 1.25
+    },
+    opts: {
+      encodeURI: false,
+      encoding: 'utf8',
+      timeout: 3000,
+      retry: 2,
+      retryDelay: 2100,
+      maxRedirects: 3,
+      decompress: false,
+      bufferResponse: false,
+      debug: false
+    }
+  },
+  {
+    httpVersion: '1.1',
+    https: true,
+    req: {
+      url: 'https://www.ebay.com/',
+      method: 'GET',
+      body: undefined,
+      headers: undefined,
+      query: URLSearchParams {}
+    },
+    res: {
+      status: 200,
+      statusMessage: 'OK',
+      headers: {
+        'x-content-type-options': 'nosniff',
+        'x-xss-protection': '1; mode=block',
+        'x-frame-options': 'SAMEORIGIN',
+        'accept-ch': 'sec-ch-ua-model,sec-ch-ua-platform-version,sec-ch-ua-full-version',
+        'content-type': 'text/html; charset=utf-8',
+        rlogid: 't6u%60tsodhct%60d13fiiw%3F%3Cqfwrkbkbpfg07%60jhs.22%3Fac1%3F7a%60*e7dae-19589e1e754-0x2305',
+        'x-envoy-upstream-service-time': '228',
+        server: 'ebay-proxy-server',
+        'strict-transport-security': 'max-age=31536000',
+        date: 'Wed, 12 Mar 2025 10:23:58 GMT',
+        'transfer-encoding': 'chunked',
+        connection: 'close, Transfer-Encoding',
+        'set-cookie': [Array]
+      },
+      content: 353695
+    },
+    time: {
+      req: '2025-03-12T10:23:57.975Z',
+      res: '2025-03-12T10:23:58.960Z',
+      duration: 0.985
+    },
+    opts: {
+      encodeURI: false,
+      encoding: 'utf8',
+      timeout: 3000,
+      retry: 2,
+      retryDelay: 2100,
+      maxRedirects: 3,
+      decompress: false,
+      bufferResponse: false,
+      debug: false
     }
   }
 ]
@@ -270,76 +312,63 @@ Parameter body can be either string or object type.
 As HTTP Client receives responses as string it will be automatically converted into object.
 *hcn.askJSON('http://dummy.restapiexample.com/api/v1/employees');*
 
+```js
+// default JSON headers
+{
+  'content-type': 'application/json; charset=utf-8',
+  'accept': 'application/json'
+}
+```
+
 ```
 JSON answer:
 ----------------------------------------
 {
-  requestURL: 'http://dummy.restapiexample.com/api/v1/employees',
-  requestMethod: 'GET',
-  status: 200,
-  statusMessage: 'OK',
   httpVersion: '1.1',
-  gzip: true,
   https: false,
   req: {
+    url: 'http://dummy.restapiexample.com/api/v1/employees',
+    method: 'GET',
+    body: {},
     headers: {
-      authorization: '',
-      'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
-      accept: 'application/json',
-      'cache-control': 'no-cache',
-      host: '',
-      'accept-encoding': 'gzip',
-      connection: 'close',
-      'content-type': 'application/json; charset=utf-8'
+      'content-type': 'application/json; charset=utf-8',
+      accept: 'application/json'
     },
-    payload: undefined
+    query: URLSearchParams {}
   },
   res: {
+    status: 409,
+    statusMessage: 'Conflict',
     headers: {
-      'access-control-allow-origin': '*',
-      'access-control-expose-headers': 'Content-Type, X-Requested-With, X-authentication, X-client',
-      'cache-control': 'no-store, no-cache, must-revalidate',
-      'content-encoding': 'gzip',
-      'content-type': 'application/json;charset=utf-8',
-      date: 'Fri, 06 Mar 2020 11:46:31 GMT',
-      expires: 'Thu, 19 Nov 1981 08:52:00 GMT',
-      'host-header': 'c2hhcmVkLmJsdWVob3N0LmNvbQ==',
-      pragma: 'no-cache',
-      'referrer-policy': '',
-      response: '200',
-      server: 'nginx/1.16.0',
-      'set-cookie': [
-        'PHPSESSID=5df0597c3f284dc14c0c7e564466867c; path=/',
-        'ezoadgid_133674=-1; Path=/; Domain=restapiexample.com; Expires=Fri, 06 Mar 2020 12:16:30 UTC',
-        'ezoref_133674=; Path=/; Domain=restapiexample.com; Expires=Fri, 06 Mar 2020 13:46:30 UTC',
-        'ezoab_133674=mod89-c; Path=/; Domain=restapiexample.com; Expires=Fri, 06 Mar 2020 13:46:30 UTC',
-        'active_template::133674=pub_site.1583495190; Path=/; Domain=restapiexample.com; Expires=Sun, 08 Mar 2020 11:46:30 UTC'
-      ],
-      vary: 'Accept-Encoding,X-APP-JSON',
-      'x-middleton-response': '200',
-      'x-sol': 'pub_site',
-      'content-length': '595',
-      connection: 'close'
+      date: 'Wed, 12 Mar 2025 10:25:57 GMT',
+      server: 'Apache',
+      'content-length': '83',
+      connection: 'close',
+      'content-type': 'text/html; charset=iso-8859-1'
     },
-    content: {
-      status: 'success',
-      data: [
-        [Object], [Object], [Object],
-        [Object], [Object], [Object],
-        [Object], [Object], [Object],
-        [Object], [Object], [Object],
-        [Object], [Object], [Object],
-        [Object], [Object], [Object],
-        [Object], [Object], [Object],
-        [Object], [Object], [Object]
-      ]
-    }
+    content: '<script>document.cookie = "humans_21909=1"; document.location.reload(true)</script>'
+  },
+  time: {
+    req: '2025-03-12T10:25:56.910Z',
+    res: '2025-03-12T10:25:57.698Z',
+    duration: 0.788
+  },
+  opts: {
+    encodeURI: false,
+    encoding: 'utf8',
+    timeout: 3000,
+    retry: 1,
+    retryDelay: 1300,
+    maxRedirects: 3,
+    decompress: false,
+    bufferResponse: false,
+    debug: false
   }
 }
 ```
 
 
-#### grabStreams(url, method = 'GET', body)
+#### grabStreams(url:string, method:string, body:object, headers:object)
 Get request and response streams which can be used for piping. For example:
 *const = { clientRequest, clientResponse } = hcn.grabStreams('https://www.example.com/song.mp4');*
 *clientResponse.pipe(...);*
@@ -349,15 +378,12 @@ Get request and response streams which can be used for piping. For example:
   const opts = {
     encodeURI: false,
     encoding: 'utf8',
-    timeout: 3000,
-    headers: {
-      'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36',
-      'accept': '*/*',
-      'cache-control': 'no-cache',
-      'accept-encoding': 'gzip',
-      'connection': 'close',
-      'content-type': 'text/html; charset=UTF-8'
-    },
+    timeout: 8000,
+    retry: 0,
+    retryDelay: 5500,
+    maxRedirects: 0,
+    decompress: false,
+    bufferResponse: false,
     debug: false
   };
   const hcn = new HttpClient(opts);
@@ -380,40 +406,18 @@ Get request and response streams which can be used for piping. For example:
 ```
 
 
-#### setHeaders(headerObj)
-Change request header object. Previously defined "this.headers" properties will be overwritten.
-headerObj - {'authorization', 'user-agent', accept, 'cache-control', 'host', 'accept-encoding', 'connection'}
-*hcn.setHeaders({authorization: 'myToken, 'content-type': 'application/json; charset=utf-8', accept: 'application/json'});*
-
-#### setHeader(headerName, headerValue)
-Change only one request header.
-headerName - header field name
-headerValue - header field value
-*hcn.setHeader('authorization', 'myToken);*
-
-#### delHeaders(headerNames)
-Delete the request headers.
-headerNames - array of header names ['content-type', 'accept']
-*hcn.delHeaders(['content-type', 'accept']);*
-
-#### getHeaders()
-Get the current request headers.
-
-#### injectProxyAgent(proxyAgent)
-Inject the proxy agent. The [https-proxy-agent](https://www.npmjs.com/package/https-proxy-agent) can be used.
-
 #### print(obj)
 Print the object in the console. Use it to debug the answer.
+
+
 
 
 ## AddOns
 Additional libraries.
 
-
 #### RobotsTxt
-```
+```js
 const { HttpClient, RobotsTxt } = require('@mikosoft/httpclient-node');
-
 const robotsTxt = new RobotsTxt(HttpClient);
 
 const fja = async () => {
@@ -436,5 +440,7 @@ fja();
 ```
 
 
-### License
-The software licensed under [MIT](LICENSE).
+
+
+## License
+MIT
